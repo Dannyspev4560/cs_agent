@@ -1,0 +1,20 @@
+{
+  "name": null,
+  "topics_explored": [
+    "ACCOUNT",
+    "CANCEL",
+    "CONTACT",
+    "DELIVERY",
+    "FEEDBACK",
+    "INVOICE",
+    "ORDER",
+    "PAYMENT",
+    "REFUND",
+    "SHIPPING",
+    "SUBSCRIPTION"
+  ],
+  "preferences": null,
+  "notes": null,
+  "last_active": "2026-05-26",
+  "session_id": "default"
+}

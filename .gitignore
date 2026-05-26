@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+agent/storage/*.db
+*.sqlite
+.DS_Store
+.langgraph_api/
+.claude/
