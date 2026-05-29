@@ -14,7 +14,7 @@ from typing_extensions import TypedDict
 from langchain_core.runnables import RunnableConfig
 
 from agent.profile import load_profile, save_profile
-from agent.prompts import AGENT_PROMPT, PROFILE_UPDATE_PROMPT, ROUTER_PROMPT
+from agent.prompts import AGENT_PROMPT, PROFILE_UPDATE_PROMPT, RECOMMENDER_PROMPT, ROUTER_PROMPT
 from agent.tools import ALL_TOOLS
 
 load_dotenv()
@@ -46,8 +46,9 @@ _llm_small = ChatOpenAI(
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-    query_type: str       # set by router: "structured" | "unstructured" | "out_of_scope"
+    query_type: str       # set by router: "structured" | "unstructured" | "out_of_scope" | "recommender" | "confirm"
     iteration_count: int  # incremented each agent loop to enforce MAX_ITERATIONS
+    pending_query: str #set by recommender
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +69,7 @@ def router(state: AgentState) -> dict:
     match = re.search(r"\{.*\}", response.content, re.DOTALL)
     try:
         query_type = json.loads(match.group())["query_type"]
-        if query_type not in {"structured", "unstructured", "out_of_scope"}:
+        if query_type not in {"structured", "unstructured", "out_of_scope", "recommender", "confirm"}:
             query_type = "out_of_scope"
     except Exception:
         query_type = "out_of_scope"
@@ -114,6 +115,45 @@ def agent(state: AgentState, config: RunnableConfig) -> dict:
     }
 
 
+def recommender(state: AgentState, config: RunnableConfig) -> dict:
+    """Suggest a follow-up query based on conversation history and user profile.
+
+    Does NOT call any tools — only generates a suggestion and stores it in
+    pending_query for the user to confirm or refine.
+    """
+    session_id = config.get("configurable", {}).get("thread_id", "default")
+    profile = load_profile(session_id)
+
+    recent = [m for m in state["messages"][-6:] if m.type in ("human", "ai") and m.content]
+    messages_text = "\n".join(f"{m.type.upper()}: {str(m.content)[:300]}" for m in recent)
+    latest_message = state["messages"][-1].content
+
+    response = _llm.invoke([
+        SystemMessage(content=RECOMMENDER_PROMPT.format(
+            user_profile=json.dumps(profile, indent=2),
+            recent_messages=messages_text,
+            latest_message=latest_message,
+        )),
+        HumanMessage(content="Suggest a relevant next query for this user."),
+    ])
+
+    match = re.search(r"\{.*\}", response.content, re.DOTALL)
+    if match is None:
+        print(f"[Recommender] WARNING: LLM returned no JSON — raw response: {response.content[:300]}")
+        fallback = "What else would you like to explore about the dataset?"
+        return {"messages": [AIMessage(content=fallback)], "pending_query": ""}
+
+    try:
+        parsed = json.loads(match.group())
+        pending_query = parsed.get("pending_query", "")
+        message = parsed.get("message", "Here's a suggestion — should I go ahead?")
+        print(f"[Recommender] Suggestion stored: {pending_query!r}")
+        return {"messages": [AIMessage(content=message)], "pending_query": pending_query}
+    except json.JSONDecodeError as e:
+        print(f"[Recommender] WARNING: JSON parse failed ({e})")
+        return {"messages": [AIMessage(content="I couldn't come up with a suggestion right now. Try asking again.")], "pending_query": ""}
+
+
 def decline(state: AgentState) -> dict:
     """Politely refuse out-of-scope queries."""
     return {"messages": [AIMessage(content=(
@@ -121,6 +161,13 @@ def decline(state: AgentState) -> dict:
         "Your question appears to be outside that scope — I can't help with it."
     ))]}
 
+def confirm(state: AgentState) -> dict:
+    """Inject the pending suggested query as a HumanMessage for the agent to execute."""
+    pending = state.get("pending_query", "")
+    if not pending:
+        return {"messages": [AIMessage(content="I don't have a pending suggestion to execute. Ask me 'what should I query next?' first.")]}
+    print(f"[Confirm] Executing pending query: {pending!r}")
+    return {"messages": [HumanMessage(content=pending)]}
 
 def update_profile(state: AgentState, config: RunnableConfig) -> dict:
     """Extract facts from the current turn and persist them to the user profile."""
@@ -184,6 +231,8 @@ def build_graph(checkpointer=None):
     builder.add_node("tools",          ToolNode(ALL_TOOLS))
     builder.add_node("decline",        decline)
     builder.add_node("update_profile", update_profile)
+    builder.add_node("recommender", recommender)
+    builder.add_node("confirm", confirm)
 
     builder.add_edge(START, "router")
     builder.add_conditional_edges(
@@ -193,6 +242,8 @@ def build_graph(checkpointer=None):
             "structured":   "agent",
             "unstructured": "agent",
             "out_of_scope": "decline",
+            "recommender": "recommender",
+            "confirm": "confirm"
         },
     )
     builder.add_conditional_edges(
@@ -203,6 +254,8 @@ def build_graph(checkpointer=None):
     builder.add_edge("tools",          "agent")
     builder.add_edge("update_profile", END)
     builder.add_edge("decline",        END)
+    builder.add_edge("recommender", "update_profile")
+    builder.add_edge("confirm", "agent")
 
     return builder.compile(checkpointer=checkpointer)
 

@@ -1,3 +1,29 @@
+RECOMMENDER_PROMPT = """You are a query recommender for a Customer Service Data Analyst Agent.
+
+The agent analyses the Bitext Customer Service dataset — 26,872 customer support conversations.
+Categories: ACCOUNT, CANCEL, CONTACT, DELIVERY, FEEDBACK, INVOICE, ORDER, PAYMENT, REFUND, SHIPPING, SUBSCRIPTION.
+
+User profile:
+{user_profile}
+
+Recent conversation:
+{recent_messages}
+
+User's latest message (may be an initial request or a refinement of a previous suggestion):
+{latest_message}
+
+Based on the user's history and profile, suggest one relevant follow-up query they could run.
+- If the user is refining a previous suggestion, adjust accordingly.
+- Prefer queries that build naturally on what they've already explored.
+- Do NOT execute any query — only suggest.
+
+Return ONLY this JSON and nothing else:
+{{
+  "pending_query": "<the exact query string to execute if the user confirms, written as a natural question>",
+  "message": "<friendly message to the user explaining the suggestion and asking if they want to proceed>"
+}}
+"""
+
 PROFILE_UPDATE_PROMPT = """You maintain a profile for a user of a Customer Service Data Analyst tool.
 
 Current profile:
@@ -51,8 +77,22 @@ Classify the user query into exactly one of:
     "Who won the 2024 Champions League?"
     "Write me a poem about customer service."
 
+- "recommender": the user is asking for a query suggestion or refining a previous
+  suggestion. Examples:
+    "What should I query next?"
+    "What else can I explore?"
+    "I'd rather see examples instead."
+    "Can you suggest something about refunds?"
+
+- "confirm": the user is confirming a pending suggested query and wants it executed.
+  Examples:
+    "Yes, do it."
+    "Go ahead."
+    "Sure, execute that."
+    "Yes please."
+
 Respond with ONLY this JSON and nothing else:
-{"query_type": "<structured|unstructured|out_of_scope>"}
+{"query_type": "<structured|unstructured|out_of_scope|recommender|confirm>"}
 """
 
 AGENT_PROMPT = """You are a Customer Service Data Analyst Agent. You answer questions

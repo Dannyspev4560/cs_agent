@@ -14,10 +14,11 @@ A LangGraph ReAct agent that answers structured and open-ended questions about t
 __start__
     │
   router              ← classifies query: structured / unstructured / out_of_scope
-    │
-  ┌─┴──────────┐
-agent        decline  ← politely refuses out-of-scope queries
-  │  ⇄ tools          ← ReAct loop (max 12 iterations)
+    │                                    / recommender / confirm
+  ┌─┴──────────┬──────────────┬──────────────┐
+agent        decline      recommender      confirm
+  │  ⇄ tools  │             │               │
+  │           END     update_profile      agent (executes pending query)
   │
 update_profile        ← extracts and persists user facts after each turn
   │
@@ -30,7 +31,7 @@ __end__
 |---|---|
 | `agent/graph.py` | LangGraph StateGraph — nodes, edges, state definition |
 | `agent/tools.py` | 5 dataset tools with Pydantic schemas |
-| `agent/prompts.py` | Router, agent, and profile-update system prompts |
+| `agent/prompts.py` | Router, agent, profile-update, and recommender prompts |
 | `agent/profile.py` | Per-session user profile — load and save to JSON |
 | `main.py` | Interactive CLI with persistent session memory |
 | `app.py` | Streamlit chat UI (Bonus A) |
@@ -52,7 +53,7 @@ Two models are used for different roles:
 
 | Node | Model | Reason |
 |---|---|---|
-| `agent` | `meta-llama/Llama-3.3-70B-Instruct` | Tool selection and multi-step reasoning benefit from full 70B capacity |
+| `agent`, `recommender` | `meta-llama/Llama-3.3-70B-Instruct` | Tool selection, multi-step reasoning, and contextual query suggestion benefit from full 70B capacity |
 | `router`, `update_profile` | `google/gemma-3-27b-it` | Classification and JSON extraction tasks — no tool use, smaller model is sufficient |
 
 ---
@@ -111,6 +112,26 @@ Agent: Here are 3 examples from the REFUND category: ...
 You: Show me 3 more
 Agent: Here are 3 more examples: ...   ← remembers context from previous turn
 ```
+
+### Query Recommender (Bonus B)
+
+Ask the agent for a suggestion, refine it, and confirm to execute:
+
+```
+You: What should I query next?
+Agent: Based on your interest in invoices, I suggest seeing the distribution of
+       intents in the PAYMENT category. Should I go ahead?
+
+You: I'd rather see examples instead.
+Agent: Then I'd suggest: show 5 examples from the PAYMENT category. Should I go ahead?
+
+You: Yes, do it.
+[Router] → confirm
+[Confirm] Executing pending query: 'Show me 5 examples from the PAYMENT category'
+Agent: Here are 5 examples from the PAYMENT category: ...
+```
+
+The agent never executes a suggestion until the user explicitly confirms.
 
 ### Option 2 — Streamlit UI (Bonus A)
 
