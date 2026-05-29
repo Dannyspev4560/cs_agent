@@ -1,4 +1,5 @@
 .env
+Bitext-customer-support-llm-chatbot-training-dataset/
 __pycache__/
 *.py[cod]
 .venv/

@@ -63,15 +63,21 @@ Two models are used for different roles:
 # 1. Clone the repo and enter the directory
 cd cs_agent
 
-# 2. Create and activate a virtual environment
+# 2. Download the dataset
+mkdir -p Bitext-customer-support-llm-chatbot-training-dataset
+curl -L \
+  "https://huggingface.co/datasets/bitext/Bitext-customer-support-llm-chatbot-training-dataset/resolve/main/Bitext_Sample_Customer_Support_Training_Dataset_27K_responses-v11.csv" \
+  -o "Bitext-customer-support-llm-chatbot-training-dataset/Bitext_Sample_Customer_Support_Training_Dataset_27K_responses-v11.csv"
+
+# 3. Create and activate a virtual environment
 python -m venv .venv
 .venv\Scripts\Activate.ps1        # Windows PowerShell
 # source .venv/bin/activate        # macOS / Linux
 
-# 3. Install dependencies
+# 4. Install dependencies
 pip install -r requirements.txt
 
-# 4. Create a .env file in the project root with your credentials:
+# 5. Create a .env file in the project root with your credentials:
 Nebius_API_key=<your Nebius Token Factory API key>
 LANGCHAIN_TRACING_V2=true          # optional — enables LangSmith tracing
 LANGCHAIN_API_KEY=<your LangSmith key>
