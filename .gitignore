@@ -5,6 +5,9 @@ __pycache__/
 .venv/
 venv/
 agent/storage/*.db
+agent/storage/*.db-shm
+agent/storage/*.db-wal
+agent/storage/profiles/
 *.sqlite
 .DS_Store
 .langgraph_api/
