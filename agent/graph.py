@@ -135,15 +135,20 @@ def update_profile(state: AgentState, config: RunnableConfig) -> dict:
         SystemMessage(content=PROFILE_UPDATE_PROMPT.format(
             current_profile=json.dumps(profile, indent=2),
             recent_messages=messages_text,
-        ))
+        )),
+        HumanMessage(content="Update the profile based on the conversation above. Return only the JSON object."),
     ])
 
     match = re.search(r"\{.*\}", response.content, re.DOTALL)
+    if match is None:
+        print(f"[Profile] WARNING: LLM returned no JSON — raw response: {response.content[:300]}")
+        return {}
     try:
         updated = json.loads(match.group())
         save_profile(session_id, updated)
-    except Exception:
-        pass  # Keep existing profile if LLM output is unparseable
+        print(f"[Profile] Updated for session '{session_id}'")
+    except json.JSONDecodeError as e:
+        print(f"[Profile] WARNING: JSON parse failed ({e}) — raw match: {match.group()[:300]}")
 
     return {}
 
